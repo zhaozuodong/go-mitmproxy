@@ -7,14 +7,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	uuid "github.com/satori/go.uuid"
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/net/proxy"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
-
-	uuid "github.com/satori/go.uuid"
-	log "github.com/sirupsen/logrus"
 )
 
 // client connection
@@ -367,55 +367,71 @@ func (c *wrapServerConn) Close() error {
 
 // connect proxy when set https_proxy env
 // ref: http/transport.go dialConn func
-func getProxyConn(proxyUrl *url.URL, address string) (net.Conn, error) {
-	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyUrl.Host)
-	if err != nil {
-		return nil, err
-	}
-	connectReq := &http.Request{
-		Method: "CONNECT",
-		URL:    &url.URL{Opaque: address},
-		Host:   address,
-		Header: http.Header{},
-	}
-	if proxyUrl.User != nil {
-		connectReq.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(proxyUrl.User.String())))
-	}
-	connectCtx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	defer cancel()
-	didReadResponse := make(chan struct{}) // closed after CONNECT write+read is done or fails
-	var resp *http.Response
-	// Write the CONNECT request & read the response.
-	go func() {
-		defer close(didReadResponse)
-		err = connectReq.Write(conn)
+func getProxyConn(proxyUrl *url.URL, address string) (conn net.Conn, err error) {
+	if strings.Contains(proxyUrl.Scheme, "socks") {
+		auth := &proxy.Auth{}
+		if password, b := proxyUrl.User.Password(); b {
+			auth.User = proxyUrl.User.Username()
+			auth.Password = password
+		}
+		dialer, err := proxy.SOCKS5("tcp", proxyUrl.Host, auth, proxy.Direct)
 		if err != nil {
-			return
+			return nil, err
 		}
-		// Okay to use and discard buffered reader here, because
-		// TLS server will not speak until spoken to.
-		br := bufio.NewReader(conn)
-		resp, err = http.ReadResponse(br, connectReq)
-	}()
-	select {
-	case <-connectCtx.Done():
-		conn.Close()
-		<-didReadResponse
-		return nil, connectCtx.Err()
-	case <-didReadResponse:
-		// resp or err now set
-	}
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-	if resp.StatusCode != 200 {
-		_, text, ok := strings.Cut(resp.Status, " ")
-		conn.Close()
-		if !ok {
-			return nil, errors.New("unknown status code")
+		conn, err = dialer.Dial("tcp", address)
+		if err != nil {
+			return nil, err
 		}
-		return nil, errors.New(text)
+	} else {
+		conn, err = (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyUrl.Host)
+		if err != nil {
+			return nil, err
+		}
+		connectReq := &http.Request{
+			Method: "CONNECT",
+			URL:    &url.URL{Opaque: address},
+			Host:   address,
+			Header: http.Header{},
+		}
+		if proxyUrl.User != nil {
+			connectReq.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(proxyUrl.User.String())))
+		}
+		connectCtx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+		defer cancel()
+		didReadResponse := make(chan struct{}) // closed after CONNECT write+read is done or fails
+		var resp *http.Response
+		// Write the CONNECT request & read the response.
+		go func() {
+			defer close(didReadResponse)
+			err = connectReq.Write(conn)
+			if err != nil {
+				return
+			}
+			// Okay to use and discard buffered reader here, because
+			// TLS server will not speak until spoken to.
+			br := bufio.NewReader(conn)
+			resp, err = http.ReadResponse(br, connectReq)
+		}()
+		select {
+		case <-connectCtx.Done():
+			conn.Close()
+			<-didReadResponse
+			return nil, connectCtx.Err()
+		case <-didReadResponse:
+			// resp or err now set
+		}
+		if err != nil {
+			conn.Close()
+			return nil, err
+		}
+		if resp.StatusCode != 200 {
+			_, text, ok := strings.Cut(resp.Status, " ")
+			conn.Close()
+			if !ok {
+				return nil, errors.New("unknown status code")
+			}
+			return nil, errors.New(text)
+		}
 	}
 	return conn, nil
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/lqqyt2423/go-mitmproxy/proxy"
 	log "github.com/sirupsen/logrus"
-	"github.com/tidwall/gjson"
 	"strings"
 )
 
@@ -39,12 +38,8 @@ func (c *ListeningRequest) Response(f *proxy.Flow) {
 	for _, url := range urls {
 		if strings.Contains(f.Request.URL.String(), url) {
 			fmt.Println(f.Request.URL.String())
-			if !gjson.ValidBytes(f.Response.Body) {
-				log.Info("json is err")
-				continue
-			}
-			data := gjson.ParseBytes(f.Response.Body)
-			fmt.Println(data.String())
+			body, _ := f.Response.DecodedBody()
+			fmt.Println(string(body))
 		}
 	}
 }

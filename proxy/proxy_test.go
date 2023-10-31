@@ -90,7 +90,7 @@ func (helper *testProxyHelper) init(t *testing.T) {
 
 	// start proxy
 	testProxy, err := NewProxy(&Options{
-		Addr:        helper.proxyAddr, // some random port
+		HttpAddr:    helper.proxyAddr, // some random port
 		SslInsecure: true,
 	})
 	handleError(t, err)

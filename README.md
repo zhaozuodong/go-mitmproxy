@@ -1,47 +1,45 @@
 # go-mitmproxy
 
-[简体中文](./README_CN.md)
+`go-mitmproxy` 是一个用 Golang 实现的 [mitmproxy](https://mitmproxy.org/)，支持中间人攻击（Man-in-the-middle）并解析、监测、篡改 HTTP/HTTPS 流量。
 
-`go-mitmproxy` is a Golang implementation of [mitmproxy](https://mitmproxy.org/) that supports man-in-the-middle attacks and parsing, monitoring, and tampering with HTTP/HTTPS traffic.
+## 主要功能
 
-## Key features
+- 支持http/socks5协议代理
+- 解析 HTTP/HTTPS 流量，可通过 [WEB 界面](#web-界面)查看流量详情。
+- 支持[插件机制](#通过开发插件添加功能)，方便扩展自己需要的功能。多种事件 HOOK 可参考 [examples](./examples)。
+- HTTPS 证书相关逻辑与 [mitmproxy](https://mitmproxy.org/) 兼容，并保存在 `~/.mitmproxy` 文件夹中。如果之前已经用过 `mitmproxy` 并安装信任了根证书，则 `go-mitmproxy` 可以直接使用。
+- 支持 Map Remote 和 Map Local。
+- 
+## 暂未实现的功能
 
-- Parses HTTP/HTTPS traffic and displays traffic details via a [web interface](#web-interface).
-- Supports a [plugin mechanism](#adding-functionality-by-developing-plugins) for easily extending functionality. Various event hooks can be found in the [examples](./examples) directory.
-- HTTPS certificate handling is compatible with [mitmproxy](https://mitmproxy.org/) and stored in the `~/.mitmproxy` folder. If the root certificate is already trusted from a previous use of `mitmproxy`, `go-mitmproxy` can use it directly.
-- Map Remote and Map Local support.
-- Refer to the [configuration documentation](#additional-parameters) for more features.
+- 只支持客户端显示设置代理，不支持透明代理模式。
+- 暂不支持 http/2 协议解析和 websocket 协议解析。
 
-## Unsupported features
+> 如需了解显示设置代理和透明代理模式的区别，请参考 Python 版本的 mitmproxy 文档：[How mitmproxy works](https://docs.mitmproxy.org/stable/concepts-howmitmproxyworks/)。`go-mitmproxy` 目前支持文中提到的『Explicit HTTP』和『Explicit HTTPS』。
 
-- Only supports setting the proxy manually in the client, not transparent proxy mode.
-- Currently does not support HTTP/2 protocol parsing or WebSocket protocol parsing.
+## 命令行工具
 
-> For more information on the difference between manually setting a proxy and transparent proxy mode, please refer to the mitmproxy documentation for the Python version: [How mitmproxy works](https://docs.mitmproxy.org/stable/concepts-howmitmproxyworks/). go-mitmproxy currently supports "Explicit HTTP" and "Explicit HTTPS" as mentioned in the article.
-
-## Command Line Tool
-
-### Installation
+### 安装
 
 ```bash
 go install github.com/lqqyt2423/go-mitmproxy/cmd/go-mitmproxy@latest
 ```
 
-### Usage
+### 使用
 
-Use the following command to start the go-mitmproxy proxy server:
+使用以下命令启动 go-mitmproxy 代理服务器：
 
 ```bash
 go-mitmproxy
 ```
 
-After starting, the HTTP proxy address is set to port 9080 by default, and the web interface is set to port 9081 by default.
+启动后，HTTP 代理地址默认为 9080 端口，Web 界面默认在 9081 端口。
 
-The certificate needs to be installed after the first startup to parse HTTPS traffic. The certificate will be automatically generated after the first startup command and stored in `~/.mitmproxy/mitmproxy-ca-cert.pem`. Installation steps can be found in the Python mitmproxy documentation: [About Certificates](https://docs.mitmproxy.org/stable/concepts-certificates/).
+首次启动后需安装证书以解析 HTTPS 流量，证书会在首次启动命令后自动生成，路径为 `~/.mitmproxy/mitmproxy-ca-cert.pem`。安装步骤可参考 Python mitmproxy 文档：[About Certificates](https://docs.mitmproxy.org/stable/concepts-certificates/)。
 
-### Additional Parameters
+### 更多参数
 
-ou can use the following command to view more parameters of go-mitmproxy:
+可以使用以下命令查看 go-mitmproxy 的更多参数：
 
 ```bash
 go-mitmproxy -h
@@ -49,35 +47,37 @@ go-mitmproxy -h
 
 ```txt
 Usage of go-mitmproxy:
-  -addr string
-    	proxy listen addr (default ":9080")
-  -allow_hosts value
-    	a list of allow hosts
+  -http_addr string
+    	代理监听地址 (默认值为 ":9080")
+  -socks_addr string
+    	代理监听地址 (默认值为 ":9089")
+  -allow_hosts []string
+    	HTTPS解析域名白名单
   -cert_path string
-    	path of generate cert files
+    	生成证书文件路径
   -debug int
-    	debug mode: 1 - print debug log, 2 - show debug from
+    	调试模式：1-打印调试日志，2-显示调试来源
   -f string
-    	Read configuration from file by passing in the file path of a JSON configuration file.
+    	从文件名读取配置，传入json配置文件地址
   -ignore_hosts value
-    	a list of ignore hosts
+    	HTTPS解析域名黑名单
   -map_local string
-    	map local config filename
+    	map local json配置文件地址
   -map_remote string
-    	map remote config filename
+    	map remote json配置文件地址
   -ssl_insecure
-    	not verify upstream server SSL/TLS certificates.
+    	不验证上游服务器的 SSL/TLS 证书
   -upstream string
     	upstream proxy
   -version
-    	show go-mitmproxy version
+    	显示 go-mitmproxy 版本
   -web_addr string
-    	web interface listen addr (default ":9081")
+    	web 界面监听地址 (默认值为 ":9081")
 ```
 
-## Importing as a package for developing functionalities
+## 作为包引入开发功能
 
-### Simple Example
+### 简单示例
 
 ```golang
 package main
@@ -90,7 +90,8 @@ import (
 
 func main() {
 	opts := &proxy.Options{
-		Addr:              ":9080",
+		HttpAddr:              ":9080",
+		SocksAddr:             ":9089",
 		StreamLargeBodies: 1024 * 1024 * 5,
 	}
 
@@ -103,83 +104,59 @@ func main() {
 }
 ```
 
-### Adding Functionality by Developing Plugins
+### 通过开发插件添加功能
 
-Refer to the [examples](./examples) for adding your own plugins by implementing the `AddAddon` method.
+参考示例 [examples](./examples)，可通过自己实现 `AddAddon` 方法添加自己实现的插件。
 
-The following are the currently supported event nodes:
+下面列出目前支持的事件节点：
 
 ```golang
 type Addon interface {
-	// A client has connected to mitmproxy. Note that a connection can correspond to multiple HTTP requests.
+	// 一个客户端已经连接到了mitmproxy。请注意，一个连接可能对应多个HTTP请求。
 	ClientConnected(*ClientConn)
 
-	// A client connection has been closed (either by us or the client).
+	// 一个客户端连接已关闭（由我们或客户端关闭）。
 	ClientDisconnected(*ClientConn)
 
-	// Mitmproxy has connected to a server.
+	// mitmproxy 已连接到服务器。
 	ServerConnected(*ConnContext)
 
-	// A server connection has been closed (either by us or the server).
+	// 服务器连接已关闭（由我们或服务器关闭）。
 	ServerDisconnected(*ConnContext)
 
-	// The TLS handshake with the server has been completed successfully.
+	// 与服务器的TLS握手已成功完成。
 	TlsEstablishedServer(*ConnContext)
 
-	// HTTP request headers were successfully read. At this point, the body is empty.
+	// HTTP请求头已成功读取。此时，请求体为空。
 	Requestheaders(*Flow)
 
-	// The full HTTP request has been read.
+	// 完整的HTTP请求已被读取。
 	Request(*Flow)
 
-	// HTTP response headers were successfully read. At this point, the body is empty.
+	// HTTP响应头已成功读取。此时，响应体为空。
 	Responseheaders(*Flow)
 
-	// The full HTTP response has been read.
+	// 完整的HTTP响应已被读取。
 	Response(*Flow)
 
-	// Stream request body modifier
+	// 流式请求体修改器
 	StreamRequestModifier(*Flow, io.Reader) io.Reader
 
-	// Stream response body modifier
+	// 流式响应体修改器
 	StreamResponseModifier(*Flow, io.Reader) io.Reader
 }
 ```
 
-## WEB Interface
+## WEB 界面
 
-You can access the web interface at http://localhost:9081/ using a web browser.
+你可以通过浏览器访问 http://localhost:9081/ 来使用 WEB 界面。
 
-### Features
+### 功能点
 
-- View detailed information of HTTP/HTTPS requests
-- Supports formatted preview of JSON requests/responses
-- Supports binary mode to view response body
-- Supports advanced filtering rules
-- Supports request breakpoint function
-
-### Screenshot Examples
-
-![](./assets/web-1.png)
-
-![](./assets/web-2.png)
-
-![](./assets/web-3.png)
-
-### Sponsor Me
-
-If you find this project helpful, consider buying me a cup of coffee.
-
-When sponsoring, you can add a note stating the source as "go-mitmproxy," and I will add you to the sponsorship list below.
-
-<div align="center">
-	<img alt="sponsorme" src="./assets/sponsor-me.jpeg" style="width: 300px" />
-</div>
-
-Thank you to the following sponsors:
-
-None at the moment.
-
-## License
-
-[MIT License](./LICENSE)
+- 支持 HTTP/SOCKS5 协议代理服务
+- 查看 HTTP/HTTPS 请求的详细信息
+- 支持对 JSON 请求/响应进行格式化预览
+- 支持二进制模式查看响应体
+- 支持高级的筛选过滤规则
+- 支持请求断点功能
+- 支持上游socks代理

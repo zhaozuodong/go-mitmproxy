@@ -250,6 +250,7 @@ func (connCtx *ConnContext) tlsHandshake(clientHello *tls.ClientHelloInfo) error
 		KeyLogWriter:       getTlsKeyLogWriter(),
 		ServerName:         clientHello.ServerName,
 		NextProtos:         []string{"http/1.1"}, // todo: h2
+		//NextProtos: []string{"http/1.1", "apns-security-v3", "apns-pack-v1"},
 		// CurvePreferences:   clientHello.SupportedCurves, // todo: 如果打开会出错
 		CipherSuites: clientHello.CipherSuites,
 	}

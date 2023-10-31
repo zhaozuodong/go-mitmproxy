@@ -1,28 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"github.com/lqqyt2423/go-mitmproxy/proxy"
 	log "github.com/sirupsen/logrus"
+	"net/http"
+	"net/url"
 	"strings"
-)
-
-var (
-	urls = []string{
-		"/api/sns/v6/homefeed",
-		"/api/sns/v3/user/info",
-		"/api/sns/v3/user/info",
-		"/api/sns/v1/user/followers",
-		"/api/sns/v1/user/followings",
-		"/api/sns/v1/note/faved",
-		"/api/sns/v4/note/user/posted",
-		"/api/sns/v4/note/user/posted",
-		"/api/sns/v2/note/feed",
-		"/api/sns/v3/note/videofeed",
-		"/api/sns/v2/note/widgets",
-		"/api/sns/v5/note/comment/list",
-		"/api/sns/v10/search/notes",
-	}
 )
 
 type ListeningRequest struct {
@@ -34,20 +17,16 @@ func (c *ListeningRequest) Response(f *proxy.Flow) {
 	if !strings.Contains(contentType, "json") {
 		return
 	}
-
-	for _, url := range urls {
-		if strings.Contains(f.Request.URL.String(), url) {
-			fmt.Println(f.Request.URL.String())
-			body, _ := f.Response.DecodedBody()
-			fmt.Println(string(body))
-		}
-	}
+	log.Info(f.Request.URL.String())
+	body, _ := f.Response.DecodedBody()
+	log.Info(string(body))
 }
 
 func main() {
 	opts := &proxy.Options{
-		Addr:              ":9080",
-		StreamLargeBodies: 1024 * 1024 * 1000,
+		HttpAddr:          ":9080",
+		SocksAddr:         ":9089",
+		StreamLargeBodies: 1024 * 1024 * 5,
 	}
 
 	p, err := proxy.NewProxy(opts)
@@ -55,9 +34,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	//p.SetUpstreamProxy(func(req *http.Request) (*url.URL, error) {
-	//	return url.Parse("socks://127.0.0.1:8889")
-	//})
+	p.SetUpstreamProxy(func(req *http.Request) (*url.URL, error) {
+		return url.Parse("socks://127.0.0.1:8889")
+	})
 
 	p.AddAddon(&ListeningRequest{})
 

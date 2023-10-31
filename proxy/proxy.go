@@ -5,17 +5,22 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"github.com/armon/go-socks5"
+	"github.com/haxii/fastproxy/bufiopool"
+	"github.com/haxii/fastproxy/superproxy"
+	log "github.com/sirupsen/logrus"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
-
-	log "github.com/sirupsen/logrus"
+	"strconv"
+	"strings"
 )
 
 type Options struct {
 	Debug             int
-	Addr              string
+	HttpAddr          string
+	SocksAddr         string
 	StreamLargeBodies int64 // 当请求或响应体大于此字节时，转为 stream 模式
 	SslInsecure       bool
 	CaRootPath        string
@@ -32,6 +37,10 @@ type Proxy struct {
 	interceptor     *middle
 	shouldIntercept func(req *http.Request) bool              // req is received by proxy.server
 	upstreamProxy   func(req *http.Request) (*url.URL, error) // req is received by proxy.server, not client request
+
+	socks5proxy  *socks5.Server
+	socks5tunnel *superproxy.SuperProxy
+	bufioPool    *bufiopool.Pool
 }
 
 // proxy.server req context key
@@ -65,7 +74,7 @@ func NewProxy(opts *Options) (*Proxy, error) {
 	}
 
 	proxy.server = &http.Server{
-		Addr:    opts.Addr,
+		Addr:    opts.HttpAddr,
 		Handler: proxy,
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
 			connCtx := newConnContext(c, proxy)
@@ -99,15 +108,38 @@ func (proxy *Proxy) Start() error {
 	if err != nil {
 		return err
 	}
-
+	go proxy.startSocksProxy()
 	go proxy.interceptor.start()
+	log.Infof("http proxy start listen at %v\n", proxy.server.Addr)
 
-	log.Infof("Proxy start listen at %v\n", proxy.server.Addr)
 	pln := &wrapListener{
 		Listener: ln,
 		proxy:    proxy,
 	}
 	return proxy.server.Serve(pln)
+}
+
+func (proxy *Proxy) startSocksProxy() {
+	if proxy.Opts.SocksAddr != "" {
+		port, _ := strconv.ParseInt(strings.Split(proxy.Opts.HttpAddr, ":")[1], 10, 64)
+		proxy.socks5tunnel, _ = superproxy.NewSuperProxy("127.0.0.1", uint16(port), superproxy.ProxyTypeHTTP, "", "", "")
+		proxy.bufioPool = bufiopool.New(4096, 4096)
+		socks5Config := &socks5.Config{
+			Dial: proxy.httpTunnelDialer,
+		}
+		socks5proxy, err := socks5.New(socks5Config)
+		if err != nil {
+			log.Errorf("socks5 proxy start errr:  %v\n", err.Error())
+			return
+		}
+		log.Infof("socks5 proxy start listen at %v\n", proxy.Opts.SocksAddr)
+		proxy.socks5proxy = socks5proxy
+		proxy.socks5proxy.ListenAndServe("tcp", proxy.Opts.SocksAddr)
+	}
+}
+
+func (proxy *Proxy) httpTunnelDialer(ctx context.Context, network, addr string) (net.Conn, error) {
+	return proxy.socks5tunnel.MakeTunnel(nil, nil, proxy.bufioPool, addr)
 }
 
 func (proxy *Proxy) Close() error {

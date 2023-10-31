@@ -16,7 +16,8 @@ func loadConfigFromCli() *Config {
 	config := new(Config)
 
 	flag.BoolVar(&config.version, "version", false, "show go-mitmproxy version")
-	flag.StringVar(&config.Addr, "addr", ":9080", "proxy listen addr")
+	flag.StringVar(&config.HttpAddr, "http_addr", ":9080", "http proxy listen addr")
+	flag.StringVar(&config.SocksAddr, "socks_addr", ":9089", "socks proxy listen addr")
 	flag.StringVar(&config.WebAddr, "web_addr", ":9081", "web interface listen addr")
 	flag.BoolVar(&config.SslInsecure, "ssl_insecure", false, "not verify upstream server SSL/TLS certificates.")
 	flag.Var((*arrayValue)(&config.IgnoreHosts), "ignore_hosts", "a list of ignore hosts")
@@ -37,8 +38,11 @@ func loadConfigFromCli() *Config {
 func mergeConfigs(fileConfig, cliConfig *Config) *Config {
 	config := new(Config)
 	*config = *fileConfig
-	if cliConfig.Addr != "" {
-		config.Addr = cliConfig.Addr
+	if cliConfig.HttpAddr != "" {
+		config.HttpAddr = cliConfig.HttpAddr
+	}
+	if cliConfig.SocksAddr != "" {
+		config.SocksAddr = cliConfig.SocksAddr
 	}
 	if cliConfig.WebAddr != "" {
 		config.WebAddr = cliConfig.WebAddr

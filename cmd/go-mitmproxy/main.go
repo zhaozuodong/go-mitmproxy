@@ -16,7 +16,8 @@ import (
 type Config struct {
 	version bool // show go-mitmproxy version
 
-	Addr        string   // proxy listen addr
+	HttpAddr    string   // proxy listen addr
+	SocksAddr   string   // socks proxy listen addr
 	WebAddr     string   // web interface listen addr
 	SslInsecure bool     // not verify upstream server SSL/TLS certificates.
 	IgnoreHosts []string // a list of ignore hosts
@@ -51,7 +52,8 @@ func main() {
 
 	opts := &proxy.Options{
 		Debug:             config.Debug,
-		Addr:              config.Addr,
+		HttpAddr:          config.HttpAddr,
+		SocksAddr:         config.SocksAddr,
 		StreamLargeBodies: 1024 * 1024 * 5,
 		SslInsecure:       config.SslInsecure,
 		CaRootPath:        config.CertPath,

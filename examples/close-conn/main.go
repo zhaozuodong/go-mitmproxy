@@ -24,7 +24,7 @@ func (a *CloseConn) Requestheaders(f *proxy.Flow) {
 
 func main() {
 	opts := &proxy.Options{
-		Addr:              ":9080",
+		HttpAddr:          ":9080",
 		StreamLargeBodies: 1024 * 1024 * 5,
 	}
 

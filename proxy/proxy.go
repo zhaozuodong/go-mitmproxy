@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 )
 
 type Options struct {
@@ -121,15 +120,23 @@ func (proxy *Proxy) Start() error {
 
 func (proxy *Proxy) startSocksProxy() {
 	if proxy.Opts.SocksAddr != "" {
-		port, _ := strconv.ParseInt(strings.Split(proxy.Opts.HttpAddr, ":")[1], 10, 64)
-		proxy.socks5tunnel, _ = superproxy.NewSuperProxy("127.0.0.1", uint16(port), superproxy.ProxyTypeHTTP, "", "", "")
+		proxyHost, proxyPort, err := net.SplitHostPort(proxy.Opts.HttpAddr)
+		if err != nil {
+			log.Errorf("parse proxy addr err:  %v\n", err.Error())
+			return
+		}
+		if proxyHost == "" {
+			proxyHost = "0.0.0.0"
+		}
+		port, _ := strconv.ParseInt(proxyPort, 10, 64)
+		proxy.socks5tunnel, _ = superproxy.NewSuperProxy(proxyHost, uint16(port), superproxy.ProxyTypeHTTP, "", "", "")
 		proxy.bufioPool = bufiopool.New(4096, 4096)
 		socks5Config := &socks5.Config{
 			Dial: proxy.httpTunnelDialer,
 		}
 		socks5proxy, err := socks5.New(socks5Config)
 		if err != nil {
-			log.Errorf("socks5 proxy start errr:  %v\n", err.Error())
+			log.Errorf("socks5 proxy start err:  %v\n", err.Error())
 			return
 		}
 		log.Infof("socks5 proxy start listen at %v\n", proxy.Opts.SocksAddr)
